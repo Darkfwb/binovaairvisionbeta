@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Binova Hackathon - Public Mobile</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0a0a0a; 
+            color: white; 
+            scroll-behavior: smooth; 
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-card { background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 24px; }
+        
+        /* Mobile Bottom Nav - REVISED: Darker, not brighten */
+        .mobile-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 70px; display: flex; justify-content: space-around; align-items: center; z-index: 100; border-top: 1px solid rgba(255,255,255,0.08); background: #0c0c0c; }
+        
+        /* Language Selector - REVISED: Mobile Pill Toggle */
+        .lang-pill { background: rgba(255,255,255,0.05); padding: 4px; border-radius: 99px; display: flex; gap: 4px; border: 1px solid rgba(255,255,255,0.1); }
+        .lang-btn { padding: 6px 14px; border-radius: 99px; font-size: 10px; font-weight: 800; color: #6b7280; transition: all 0.3s; }
+        .lang-btn.active { background: #3b82f6; color: white; }
+
+        .product-card { background: #0d0d0d; border-radius: 32px; overflow: hidden; transition: 0.3s ease; }
+        
+        #cart-sidebar { transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        #cart-sidebar.open { transform: translateX(0); }
+        
+        .page-section { display: none; padding-bottom: 100px; }
+        .page-section.active { display: block; }
+
+        .nav-icon { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #4b5563; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; transition: 0.3s; }
+        .nav-icon.active { color: #3b82f6; }
+
+        /* Secure input from original code */
+        .secure-input { transition: filter 0.3s ease; }
+        .secure-input:not(:focus):not(:placeholder-shown) { filter: blur(6px); }
+
+        /* Dark Map & Window */
+        .leaflet-container { background: #050505 !important; }
+        .leaflet-popup-content-wrapper { background: #111 !important; color: white !important; border-radius: 12px; }
+        .map-window { border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; height: 50vh; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
+    </style>
+</head>
+<body class="antialiased">
+
+    <nav class="glass fixed w-full top-0 z-50 px-5 py-4 flex justify-between items-center">
+        <div class="text-xl font-black tracking-tighter" onclick="showPage('intro')">ALD1K<span class="text-blue-500">.</span></div>
+        
+        <div class="flex items-center gap-4">
+            <div class="lang-pill">
+                <span onclick="setLanguage('kk')" id="lang-kk" class="lang-btn active">KZ</span>
+                <span onclick="setLanguage('ru')" id="lang-ru" class="lang-btn">RU</span>
+                <span onclick="setLanguage('en')" id="lang-en" class="lang-btn">EN</span>
+            </div>
+            <button onclick="toggleCart()" class="relative p-2 text-gray-400">
+                <span id="cart-count" class="absolute -top-1 -right-1 bg-blue-500 text-white text-[10px] font-bold px-1.5 rounded-full">0</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-nav glass">
+        <div onclick="showPage('intro')" id="btn-intro" class="nav-icon active">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            <span data-t="nav_intro">Intro</span>
+        </div>
+        <div onclick="showPage('inventory')" id="btn-inventory" class="nav-icon">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+            <span data-t="nav_inventory">Shop</span>
+        </div>
+        <div onclick="showPage('map-page')" id="btn-map" class="nav-icon">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            <span data-t="nav_map">Map</span>
+        </div>
+        <div onclick="showPage('personal')" id="btn-personal" class="nav-icon">
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            <span data-t="nav_personal">Hub</span>
+        </div>
+    </div>
+
+    <section id="intro" class="page-section active pt-32 px-6">
+        <div class="text-center mb-16">
+            <h1 class="text-6xl font-extrabold tracking-tighter mb-4 italic leading-tight" id="hero-title">Air <br><span class="text-gray-600">Vision.</span></h1>
+            <p class="text-gray-400 text-sm mb-12 font-light leading-relaxed px-4" data-t="hero_desc">Next-gen atmospheric monitoring framework.</p>
+            
+            <div id="auth-buttons" class="flex flex-col gap-3 max-w-xs mx-auto">
+                <button onclick="openAuth()" class="bg-white text-black text-xs font-black py-4 rounded-2xl uppercase tracking-widest" data-t="btn_register">Get Started</button>
+                <button onclick="openAuth()" class="text-xs font-bold uppercase tracking-widest text-gray-400 py-3" data-t="btn_signin">Sign In</button>
+            </div>
+            <div id="user-profile" class="hidden glass-card p-4 mx-auto max-w-xs flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-[10px]">U</div>
+                    <span id="user-display" class="text-xs font-mono"></span>
+                </div>
+                <button onclick="logout()" class="text-[10px] text-red-500 font-bold" data-t="btn_exit">EXIT</button>
+            </div>
+        </div>
+
+        <div id="intro-grid" class="space-y-6"></div>
+    </section>
+
+    <section id="inventory" class="page-section pt-24 px-6">
+        <h2 class="text-3xl font-black italic mb-8 tracking-tighter uppercase" data-t="nav_inventory">Inventory</h2>
+        <div id="inventory-grid" class="space-y-6"></div>
+    </section>
+
+    <section id="map-page" class="page-section pt-24 px-6 pb-20">
+        <div class="mb-6 flex justify-between items-center">
+            <h2 class="text-3xl font-black italic tracking-tighter uppercase" data-t="nav_map">Global Pollution</h2>
+            <p class="text-gray-500 text-xs font-mono tracking-widest uppercase">Live</p>
+        </div>
+        <div class="map-window relative">
+            <div id="pollution-map-container" class="w-full h-full bg-[#050505]"></div>
+        </div>
+        <div class="p-6 mt-6 glass-card text-center">
+            <h3 class="text-blue-500 font-bold text-lg mb-2">Sensor Network</h3>
+            <p class="text-gray-500 text-xs leading-relaxed">View real-time AQI data from our decentralized node cluster. Powered by WAQI & OpenAQ.</p>
+        </div>
+    </section>
+
+    <section id="personal" class="page-section pt-24 px-6">
+        <div class="glass-card p-8 text-center" id="personal-container">
+            <h2 class="text-2xl font-black italic mb-6" data-t="personal_hub">PERSONAL HUB</h2>
+            <div id="personal-content" class="text-gray-500 font-mono text-xs uppercase tracking-widest leading-loose"></div>
+        </div>
+    </section>
+
+    <div id="cart-sidebar" class="fixed top-0 right-0 h-full w-full bg-[#0a0a0a] z-[110] p-8 flex flex-col border-l border-white/5 shadow-2xl">
+        <div class="flex justify-between items-center mb-10">
+            <h2 class="text-2xl font-black italic tracking-tighter" data-t="cart_title">LOADOUT</h2>
+            <button onclick="toggleCart()" class="text-3xl text-gray-600 hover:text-white">&times;</button>
+        </div>
+        <div id="cart-items" class="flex-grow overflow-y-auto space-y-5 pr-2"></div>
+        <div class="pt-8 border-t border-white/10 mt-6">
+            <div class="flex justify-between mb-8 items-center px-2">
+                <span class="text-gray-600 uppercase text-xs font-bold tracking-widest">Total</span>
+                <span id="cart-total" class="text-xl font-mono text-blue-500">TBA</span>
+            </div>
+            <button onclick="openCheckout()" class="w-full py-5 bg-blue-600 text-white font-black rounded-2xl text-xs tracking-widest btn-blue clickable" data-t="btn_checkout">SECURE CHECKOUT</button>
+        </div>
+    </div>
+
+    <div id="auth-modal" class="fixed inset-0 bg-black/95 backdrop-blur-sm z-[120] hidden flex items-center justify-center p-6">
+        <div class="bg-[#0d0d0d] border border-white/10 p-8 rounded-[32px] w-full max-w-sm">
+            <h2 class="text-2xl font-black italic mb-6 uppercase tracking-tight">Access Portal</h2>
+            <form id="auth-form" class="space-y-4">
+                <input type="text" id="auth-user" placeholder="USERNAME" class="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-sm focus:border-blue-500 outline-none">
+                <input type="password" placeholder="PASSWORD" class="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-sm focus:border-blue-500 outline-none">
+                <button type="submit" class="w-full py-4 bg-white text-black font-black rounded-xl uppercase text-xs tracking-widest">Authorize</button>
+                <button type="button" onclick="closeAuth()" class="w-full text-gray-500 text-[10px] font-bold mt-2">CANCEL</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="checkout-modal" class="fixed inset-0 bg-black/95 backdrop-blur-xl z-[130] hidden flex items-center justify-center p-6">
+        <div class="bg-[#0d0d0d] border border-white/10 p-8 rounded-[32px] w-full max-w-sm relative">
+            <h2 class="text-2xl font-black italic mb-2 uppercase tracking-tighter">Secure Checkout</h2>
+            <p class="text-gray-600 text-[10px] uppercase tracking-widest mb-8">Payment data is visuals obscured</p>
+            <form id="checkout-form" class="space-y-4 mt-6">
+                <input type="text" placeholder="SHIPPING ADDRESS" class="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-sm focus:border-blue-500 outline-none">
+                
+                <input type="text" placeholder="CARD NUMBER" class="secure-input w-full bg-white/5 border border-white/10 p-4 rounded-xl text-sm font-mono focus:border-blue-500 outline-none">
+                
+                <div class="flex gap-4">
+                    <input type="text" placeholder="MM/YY" class="secure-input w-1/2 bg-white/5 border border-white/10 p-4 rounded-xl text-sm font-mono focus:border-blue-500 outline-none">
+                    <input type="text" placeholder="CVC" class="secure-input w-1/2 bg-white/5 border border-white/10 p-4 rounded-xl text-sm font-mono focus:border-blue-500 outline-none">
+                </div>
+                
+                <button type="submit" class="w-full py-4 bg-blue-600 text-white font-black rounded-xl uppercase text-xs tracking-widest mt-4">Confirm Auth</button>
+                <button type="button" onclick="closeCheckout()" class="w-full text-gray-500 text-[10px] font-bold mt-2">BACK</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // JS Logic with MOBILE ADDITIONS (+/- in cart)
+        const translations = {
+            kk: {
+                nav_intro: "Басты", nav_inventory: "Дүкен", nav_personal: "Жеке", nav_map: "Карта",
+                btn_signin: "Кіру", btn_register: "Тіркелу", btn_exit: "Шығу",
+                cart_title: "Себет", cart_subtotal: "Жиыны", btn_checkout: "Төлем",
+                hero_tag: "Байланыс", hero_title: "Air <br><span class='text-gray-600'>Vision.</span>",
+                hero_desc: "Келесі ұрпақ есептеулеріне арналған модульдік негіз.", btn_catalog: "Каталог",
+                personal_hub: "ЖЕКЕ ОРТАЛЫҚ", personal_signin: "Көру үшін <span class='text-blue-500 underline' onclick='openAuth()'>кіріңіз</span>.",
+                add_cart: "Себетке", type_license: "Үй нұсқасы", type_hardware: "Өнеркәсіптік", type_github: "GitHub Коды",
+                history_title: "Тарих", open_github: "GitHub ↗",
+                desc_m1: "Стандартты нұсқа. Үйге өте ыңғайлы.",
+                desc_mpro: "Күн батареялары. Бұлтты агрегация.",
+                desc_git: "AirVision бастапқы коды."
+            },
+            ru: {
+                nav_intro: "Главная", nav_inventory: "Магазин", nav_personal: "Личное", nav_map: "Карта",
+                btn_signin: "Войти", btn_register: "Начать", btn_exit: "Выход",
+                cart_title: "Корзина", cart_subtotal: "Итого", btn_checkout: "Оплата",
+                hero_tag: "Связь", hero_title: "Air <br><span class='text-gray-600'>Vision.</span>",
+                hero_desc: "Модульная платформа нового поколения.",
+                personal_hub: "ЛИЧНЫЙ ЦЕНТР", personal_signin: "Пожалуйста, <span class='text-blue-500 underline' onclick='openAuth()'>войдите</span>.",
+                add_cart: "В корзину", type_license: "Домашняя Версия", type_hardware: "Промышленная", type_github: "GitHub Код",
+                history_title: "История", open_github: "Открыть GitHub ↗",
+                desc_m1: "Идеально подходит для дома.",
+                desc_mpro: "Автономные узлы. Облако.",
+                desc_git: "Исходный код системы."
+            },
+            en: {
+                nav_intro: "Home", nav_inventory: "Shop", nav_personal: "Hub", nav_map: "Map",
+                btn_signin: "Sign In", btn_register: "Register", btn_exit: "Exit",
+                cart_title: "Cart", cart_subtotal: "Total", btn_checkout: "Checkout",
+                hero_tag: "Linked", hero_title: "Air <br><span class='text-gray-600'>Vision.</span>",
+                hero_desc: "Next-gen atmospheric monitoring.",
+                personal_hub: "PERSONAL HUB", personal_signin: "Please <span class='text-blue-500 underline' onclick='openAuth()'>Sign In</span>.",
+                add_cart: "Add to Cart", type_license: "Home Edition", type_hardware: "Industrial", type_github: "GitHub Source",
+                history_title: "History", open_github: "Open GitHub ↗",
+                desc_m1: "Perfect for residential monitoring.",
+                desc_mpro: "Solar nodes. Cloud analytics.",
+                desc_git: "Open Source industrial core."
+            }
+        };
+
+        let currentLang = 'kk';
+        let cart = JSON.parse(localStorage.getItem('ald1k_cart')) || [];
+        let currentUser = JSON.parse(localStorage.getItem('ald1k_user')) || null;
+        let mapInstance = null;
+
+        const products = [
+            { id: 1, name: "AirVision Home", typeKey: "type_license", descKey: "desc_m1", images: ["Gemini_Generated_Image_n45pm5n45pm5n45p.png"] },
+            { id: 2, name: "AirVision-Industrial", typeKey: "type_hardware", descKey: "desc_mpro", images: ["airairair.png"] },
+            { id: 3, name: "Industrial LAB", typeKey: "type_github", descKey: "desc_git", images: ["terminal-7295877_1280.jpg"], isLink: true, url: "https://github.com/Darkfwb/ATYRAU-HACKHATON_BINOVA_Industrial-code.git" }
+        ];
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`lang-${lang}`).classList.add('active');
+            document.querySelectorAll('[data-t]').forEach(el => {
+                const key = el.getAttribute('data-t');
+                el.innerHTML = translations[lang][key];
+            });
+            document.getElementById('hero-title').innerHTML = translations[lang].hero_title;
+            renderProducts();
+            updateUI();
+        }
+
+        function renderProducts() {
+            const html = products.map(p => `
+                <div class="product-card p-6">
+                    <div class="aspect-video mb-6 rounded-2xl overflow-hidden bg-zinc-900 border border-white/5">
+                        <img src="${p.images[0]}" class="w-full h-full object-cover opacity-80">
+                    </div>
+                    <div class="mb-6">
+                        <h3 class="text-xl font-bold">${p.name}</h3>
+                        <p class="text-blue-500 text-[10px] uppercase font-bold tracking-widest mt-1">${translations[currentLang][p.typeKey]}</p>
+                        <p class="text-gray-400 text-xs mt-3 leading-relaxed">${translations[currentLang][p.descKey]}</p>
+                    </div>
+                    ${p.isLink ? 
+                        `<a href="${p.url}" target="_blank" class="block text-center w-full py-4 bg-zinc-800 text-white font-black rounded-xl uppercase text-[10px] tracking-widest">${translations[currentLang].open_github}</a>` :
+                        `<button onclick="addToCart(${p.id})" class="w-full py-4 bg-white text-black font-black rounded-xl uppercase text-[10px] tracking-widest">${translations[currentLang].add_cart}</button>`
+                    }
+                </div>
+            `).join('');
+            document.getElementById('intro-grid').innerHTML = html;
+            document.getElementById('inventory-grid').innerHTML = html;
+        }
+
+        function showPage(id) {
+            document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-icon').forEach(i => i.classList.remove('active'));
+            
+            document.getElementById(id).classList.add('active');
+            document.getElementById('btn-' + (id === 'map-page' ? 'map' : id)).classList.add('active');
+            
+            window.scrollTo(0,0);
+            if (id === 'map-page') {
+                if (!mapInstance) initMap();
+                setTimeout(() => mapInstance.invalidateSize(), 300);
+            }
+        }
+
+        // --- MAP LOGIC (Condensed & Retained) ---
+        function initMap() {
+            if (mapInstance) return;
+            mapInstance = L.map('pollution-map-container', { zoomControl: false }).setView([20, 0], 2);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
+            L.tileLayer('https://tiles.aqicn.org/tiles/usepa-aqi/{z}/{x}/{y}.png?token=demo', { opacity: 0.6 }).addTo(mapInstance);
+            loadMockGlobalData();
+        }
+
+        function createMapMarker(lat, lon, country, name, val) {
+            L.circleMarker([lat, lon], { radius: 8, fillColor: val > 100 ? '#ef4444' : '#10b981', color: "#000", weight: 1, fillOpacity: 0.8 })
+            .addTo(mapInstance).bindPopup(`<b class='text-black'>${name}: ${val} AQI</b>`);
+        }
+
+        function loadMockGlobalData() {
+            const cities = [
+                { lat: 47.09, lon: 51.92, name: 'Atyrau', val: 125 },
+                { lat: 43.23, lon: 76.88, name: 'Almaty', val: 160 },
+                { lat: 51.50, lon: -0.12, name: 'London', val: 45 },
+                { lat: 39.90, lon: 116.40, name: 'Beijing', val: 210 }
+            ];
+            cities.forEach(c => createMapMarker(c.lat, c.lon, '', c.name, c.val));
+        }
+
+        // --- AUTH & UI LOGIC (REVISED for mobile +/-) ---
+        function updateUI() {
+            localStorage.setItem('ald1k_cart', JSON.stringify(cart));
+            document.getElementById('cart-count').innerText = cart.reduce((sum, item) => sum + item.qty, 0);
+
+            // Updated mobile item rendering with +/- controls
+            const itemsHtml = cart.map(item => `
+                <div class="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/10">
+                    <div class="flex items-center gap-3">
+                        <img src="${item.images[0]}" class="w-10 h-10 object-cover rounded-md opacity-70">
+                        <div>
+                            <p class="text-xs font-bold text-white leading-tight">${item.name}</p>
+                            <p class="text-blue-500 text-[9px] uppercase tracking-widest mt-1">Idea / Pre-order</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 bg-zinc-900 border border-white/5 p-1 rounded-lg">
+                        <button onclick="updateQty(${item.id}, -1)" class="w-6 h-6 rounded-md hover:bg-white/5 text-gray-500 text-base font-bold transition-all">-</button>
+                        <span class="text-xs font-mono text-white text-center w-4">${item.qty}</span>
+                        <button onclick="updateQty(${item.id}, 1)" class="w-6 h-6 rounded-md hover:bg-white/5 text-gray-500 text-base font-bold transition-all">+</button>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('cart-items').innerHTML = itemsHtml || '<p class="text-gray-600 text-center text-xs py-10">Empty</p>';
+
+            if(currentUser) {
+                document.getElementById('auth-buttons').classList.add('hidden');
+                document.getElementById('user-profile').classList.remove('hidden');
+                document.getElementById('user-display').innerText = currentUser.username;
+                renderPersonalHub();
+            } else {
+                document.getElementById('auth-buttons').classList.remove('hidden');
+                document.getElementById('user-profile').classList.add('hidden');
+                document.getElementById('personal-content').innerHTML = translations[currentLang].personal_signin;
+            }
+        }
+
+        function addToCart(id) {
+            const item = products.find(p => p.id === id);
+            const inCart = cart.find(c => c.id === id);
+            if (inCart) inCart.qty++; else cart.push({ ...item, qty: 1 });
+            updateUI(); toggleCart();
+        }
+
+        // Retained original logic
+        function updateQty(id, delta) {
+            const item = cart.find(i => i.id === id);
+            if (item) {
+                item.qty += delta;
+                if (item.qty <= 0) cart = cart.filter(i => i.id !== id);
+                updateUI();
+            }
+        }
+
+        function toggleCart() { document.getElementById('cart-sidebar').classList.toggle('open'); }
+        function openAuth() { document.getElementById('auth-modal').classList.remove('hidden'); }
+        function closeAuth() { document.getElementById('auth-modal').classList.add('hidden'); }
+        
+        // Revised Checkout functionality
+        function openCheckout() { if(!currentUser) return openAuth(); document.getElementById('checkout-modal').classList.remove('hidden'); }
+        function closeCheckout() { document.getElementById('checkout-modal').classList.add('hidden'); }
+
+        document.getElementById('auth-form').onsubmit = (e) => {
+            e.preventDefault();
+            currentUser = { username: document.getElementById('auth-user').value || 'User', orders: [] };
+            localStorage.setItem('ald1k_user', JSON.stringify(currentUser));
+            closeAuth(); updateUI();
+        };
+
+        function logout() { currentUser = null; localStorage.removeItem('ald1k_user'); updateUI(); showPage('intro'); }
+
+        document.getElementById('checkout-form').onsubmit = (e) => {
+            e.preventDefault();
+            alert("This is a demo hackathon project. Order not processed.");
+            currentUser.orders = [...(currentUser.orders || []), ...cart];
+            localStorage.setItem('ald1k_user', JSON.stringify(currentUser));
+            cart = []; closeCheckout(); updateUI(); showPage('personal');
+        };
+
+        function renderPersonalHub() {
+            let html = `<p class="mb-6 lowercase font-mono text-gray-400">user_${currentUser.username} // active</p>`;
+            if (!currentUser.orders || currentUser.orders.length === 0) {
+                html += `<div class="p-6 border border-white/5 rounded-xl text-xs">No active orders or deployments.</div>`;
+            } else {
+                currentUser.orders.forEach(o => {
+                    html += `<div class="bg-black/40 p-4 rounded-xl mb-2 text-left text-[10px] border border-white/10 flex justify-between">
+                        <span>${o.name}</span> <span class="text-blue-500 uppercase">Deployed / Processing</span>
+                    </div>`;
+                });
+            }
+            document.getElementById('personal-content').innerHTML = html;
+        }
+
+        window.onload = () => { setLanguage('kk'); };
+    </script>
+</body>
+</html>
